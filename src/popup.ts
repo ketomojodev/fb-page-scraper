@@ -13,13 +13,32 @@ async function send<T extends BackgroundResponse>(msg: unknown): Promise<T> {
   return chrome.runtime.sendMessage(msg) as Promise<T>;
 }
 
+const PHASE_LABELS: Record<string, string> = {
+  idle: "Idle",
+  preparing: "Preparing",
+  warmup: "Warming up",
+  searching: "Searching",
+  extracting: "Extracting",
+  waiting: "Waiting",
+  cooldown: "Cooling down",
+  paused: "Paused",
+  done: "Done",
+  stopped: "Stopped",
+};
+
+let lastStatus: BotStatus | null = null;
+
 function render(status: BotStatus): void {
+  lastStatus = status;
   const pill = $<HTMLSpanElement>("[data-status]");
-  pill.textContent = status.phase;
+  pill.textContent = PHASE_LABELS[status.phase] ?? status.phase;
   pill.className = "pill " + status.phase;
   $("[data-today]").textContent = String(status.pagesToday);
   $("[data-run]").textContent = String(status.pagesThisRun);
   $("[data-queue]").textContent = String(status.queueSize);
+  const start = $<HTMLButtonElement>("[data-start]");
+  start.disabled = status.running;
+  $("[data-stop]").setAttribute("aria-disabled", String(!status.running));
   const last = $<HTMLDivElement>("[data-last]");
   if (status.cooldownUntil) {
     last.textContent = `Cooldown until ${new Date(status.cooldownUntil).toLocaleTimeString()}. Cap now ${status.cap}/day.`;
@@ -27,6 +46,26 @@ function render(status: BotStatus): void {
     last.textContent = "Last: " + status.lastAction;
   } else {
     last.textContent = "No run yet";
+  }
+  updateCountdown();
+}
+
+function updateCountdown(): void {
+  const label = $<HTMLSpanElement>("[data-countdown-label]");
+  const timer = $<HTMLSpanElement>("[data-countdown]");
+  const s = lastStatus;
+  if (!s) return;
+  const pending = s.nextAt && s.nextAt > Date.now();
+  const counting = pending && (s.phase === "warmup" || s.phase === "waiting");
+  if (counting && s.nextAt) {
+    label.textContent = PHASE_LABELS[s.phase] ?? s.phase;
+    const secs = Math.max(0, Math.ceil((s.nextAt - Date.now()) / 1000));
+    timer.textContent = secs + "s";
+    timer.hidden = false;
+  } else {
+    label.textContent = "";
+    timer.textContent = "";
+    timer.hidden = true;
   }
 }
 
@@ -64,6 +103,9 @@ $("#open-settings").addEventListener("click", (e) => {
 
 document.addEventListener("DOMContentLoaded", () => {
   void refresh();
+  setInterval(() => {
+    if (lastStatus) updateCountdown();
+  }, 1000);
   setInterval(() => {
     if (!document.hidden) void refresh();
   }, 4000);
