@@ -1,8 +1,28 @@
-import { RunSettings, DEFAULT_SETTINGS, SETTINGS_KEY, nowInActiveWindow, randInt, jitter } from "./shared/config";
-import { ToBackground, BackgroundResponse, BotStatus, Severity, RunPhase, ToContent, ContentResponse, ContentOkLinks, ContentOkData, ContentOkSeverity, ExtractionData } from "./shared/messages";
+import {
+  RunSettings,
+  DEFAULT_SETTINGS,
+  SETTINGS_KEY,
+  nowInActiveWindow,
+  randInt,
+} from "./shared/config";
+import {
+  ToBackground,
+  BackgroundResponse,
+  BotStatus,
+  Severity,
+  RunPhase,
+  ToContent,
+  ContentResponse,
+  ContentOkLinks,
+  ContentOkData,
+  ContentOkSeverity,
+  ExtractionData,
+} from "./shared/messages";
 import { saveLead, leadExists, getAllLeads, recordRun } from "./shared/store";
 import { toCsv } from "./shared/csv";
 import { sleep } from "./shared/humanize";
+
+type Stage = "search" | "collect" | "visit" | "extract" | "done";
 
 interface PersistState {
   phase: RunPhase;
@@ -23,6 +43,7 @@ interface PersistState {
   runId: string | null;
   startedAt: number;
   processed: string[];
+  stage: Stage;
 }
 
 const DEFAULT_STATE: PersistState = {
@@ -44,11 +65,13 @@ const DEFAULT_STATE: PersistState = {
   runId: null,
   startedAt: 0,
   processed: [],
+  stage: "search",
 };
 
-let state: PersistState = { ...DEFAULT_STATE, processed: [] as string[] };
+let state: PersistState = { ...DEFAULT_STATE };
 let controlledTabId: number | undefined;
 let reqCounter = 0;
+let pumping = false;
 
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -62,8 +85,11 @@ async function hydrate(): Promise<void> {
   const res = await chrome.storage.local.get(["botState"]);
   if (res.botState) {
     const prev = res.botState as PersistState;
-    state = { ...DEFAULT_STATE, ...prev, processed: prev.processed ?? [] };
-    if (prev.dayKey && prev.dayKey !== todayKey()) state.pagesToday = 0;
+    state = { ...DEFAULT_STATE, ...prev, processed: prev.processed ?? [], stage: prev.stage ?? "search" };
+    if (prev.dayKey && prev.dayKey !== todayKey()) {
+      state.pagesToday = 0;
+      state.dayKey = todayKey();
+    }
   }
 }
 
@@ -79,8 +105,13 @@ function title(t: string): void {
   void chrome.action.setTitle({ title: t });
 }
 
-function notify(tag: string): void {
-  void chrome.notifications.create({ type: "basic", iconUrl: "icons/icon128.png", title: "FB Page Scraper", message: tag });
+function notify(msg: string): void {
+  void chrome.notifications.create({
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: "FB Page Scraper",
+    message: msg,
+  });
 }
 
 function buildStatus(): BotStatus {
@@ -100,12 +131,223 @@ function buildStatus(): BotStatus {
   };
 }
 
+function setPhase(p: RunPhase): void {
+  state.phase = p;
+  persist();
+}
+
+function setAction(msg: string): void {
+  state.lastAction = msg;
+  persist();
+}
+
+async function getSettings(): Promise<RunSettings> {
+  const res = await chrome.storage.local.get([SETTINGS_KEY]);
+  if (!res[SETTINGS_KEY]) return DEFAULT_SETTINGS;
+  const s = res[SETTINGS_KEY] as RunSettings;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...s,
+    antiDetection: { ...DEFAULT_SETTINGS.antiDetection, ...s.antiDetection },
+  };
+}
+
+async function controlledTab(): Promise<number> {
+  if (controlledTabId) {
+    try {
+      const t = await chrome.tabs.get(controlledTabId);
+      if (t.id) return controlledTabId;
+    } catch {
+      controlledTabId = undefined;
+    }
+  }
+  const tab = await chrome.tabs.create({ url: "https://www.facebook.com/", active: false });
+  if (!tab.id) throw new Error("tab has no id");
+  controlledTabId = tab.id;
+  return controlledTabId;
+}
+
+async function navigateTab(tabId: number, url: string): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    try {
+      await chrome.tabs.update(tabId, { url });
+      return;
+    } catch {
+      await sleep(1200);
+    }
+  }
+  state.errors.push("nav failed: " + url);
+  state.errors = state.errors.slice(-20);
+  persist();
+}
+
+async function sendToTab(tabId: number, msg: ToContent): Promise<ContentResponse | undefined> {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg);
+  } catch {
+    await sleep(1500);
+    try {
+      return await chrome.tabs.sendMessage(tabId, msg);
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+function isLinks(r: ContentResponse | undefined): r is ContentOkLinks {
+  return !!r && r.ok === true && "links" in r;
+}
+function isData(r: ContentResponse | undefined): r is ContentOkData {
+  return !!r && r.ok === true && "data" in r;
+}
+function isSeverity(r: ContentResponse | undefined): r is ContentOkSeverity {
+  return !!r && r.ok === true && "severity" in r;
+}
+
+async function detectStep(tabId: number): Promise<Severity> {
+  for (let i = 0; i < 8; i++) {
+    const resp = await sendToTab(tabId, { action: "DETECT", requestId: reqId() });
+    if (isSeverity(resp)) return resp.severity;
+    await sleep(2500);
+  }
+  return 0;
+}
+
+async function extractStep(tabId: number): Promise<ExtractionData | undefined> {
+  for (let i = 0; i < 8; i++) {
+    const resp = await sendToTab(tabId, { action: "EXTRACT", requestId: reqId() });
+    if (isData(resp)) return resp.data;
+    await sleep(2500);
+  }
+  return undefined;
+}
+
+async function handleExtractResult(data: ExtractionData): Promise<void> {
+  const exists = await leadExists(data.pageUrl);
+  if (!exists) await saveLead(data);
+  if (!state.processed.includes(data.pageUrl)) state.processed.push(data.pageUrl);
+  state.pagesToday += 1;
+  state.pagesThisRun += 1;
+  state.lastAction = "saved " + data.pageUrl;
+  persist();
+}
+
+function handleCollectedLinks(links: string[]): void {
+  const fresh = links.filter((l) => !state.processed.includes(l) && !state.queue.includes(l));
+  state.queue.push(...fresh);
+  state.lastAction = `queued ${fresh.length} links`;
+  persist();
+}
+
+async function paceUntil(ms: number): Promise<void> {
+  let remaining = ms;
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, 20000);
+    await sleep(chunk);
+    remaining -= chunk;
+  }
+}
+
+function enterCooldown(sev: Severity): void {
+  void getSettings().then((cfg) => {
+    const ad = cfg.antiDetection;
+    const hours =
+      sev >= 3 ? ad.cooldownSevereH : sev === 2 ? ad.cooldownModerateH : ad.cooldownMildH;
+    state.cooldownUntil = Date.now() + hours * 3600000;
+    state.cooldownSeverity = sev;
+    if (sev >= 2) state.currentCap = Math.max(10, Math.round(state.currentCap * 0.5));
+    state.stage = "done";
+    setPhase("cooldown");
+    badge("STOP");
+    title("FB Scraper: cooldown " + ["", "mild", "moderate", "severe"][sev]);
+  });
+}
+
+async function finishRun(): Promise<void> {
+  state.running = false;
+  state.phase = "done";
+  if (state.runId) {
+    void recordRun({
+      runId: state.runId,
+      startedAt: new Date(state.startedAt).toISOString(),
+      finishedAt: new Date().toISOString(),
+      pages: state.pagesThisRun,
+      errors: state.errors.length,
+    });
+  }
+  persist();
+  badge("DONE");
+}
+
+async function exportCsv(): Promise<number> {
+  const leads = await getAllLeads();
+  const csv = toCsv(leads);
+  const blobUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const filename =
+    "fb-leads-" + todayKey() + (state.runId ? "-" + state.runId.replace("run-", "") : "") + ".csv";
+  try {
+    await chrome.downloads.download({ url: blobUrl, filename, saveAs: true });
+  } catch {
+    void chrome.downloads.download({ url: blobUrl, filename });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  }
+  return leads.length;
+}
+
+async function startRun(): Promise<void> {
+  if (state.running) return;
+  const settings = await getSettings();
+  const keywords = settings.keywords.map((k) => k.trim()).filter(Boolean);
+  if (keywords.length === 0) {
+    notify("Add at least one keyword in Settings before starting.");
+    setPhase("stopped");
+    setAction("no keywords configured");
+    return;
+  }
+  state = {
+    ...DEFAULT_STATE,
+    processed: [],
+    running: true,
+    phase: "preparing",
+    dayKey: todayKey(),
+    keywords,
+    locations: settings.locations.map((l) => l.trim()).filter(Boolean),
+    currentCap: Math.min(settings.maxPagesPerRun, settings.antiDetection.pagesPerDay),
+    startedAt: Date.now(),
+    runId: "run-" + Date.now(),
+    stage: "search",
+  };
+  persist();
+  badge("ON");
+  title("FB Scraper: running");
+  console.log("[fb-scraper] run started", keywords, "cap", state.currentCap);
+  void ensurePumpAlarm();
+  void pump();
+}
+
+function stopRun(): void {
+  state.running = false;
+  state.phase = "stopped";
+  persist();
+  badge("");
+  title("FB Scraper");
+  void chrome.alarms.clear("scraper-pump");
+  void chrome.alarms.clear("scraper-alive");
+}
+
+async function ensurePumpAlarm(): Promise<void> {
+  await chrome.alarms.clear("scraper-pump");
+  await chrome.alarms.clear("scraper-alive");
+  await chrome.alarms.create("scraper-pump", { periodInMinutes: 0.5 });
+}
+
 chrome.runtime.onMessage.addListener((msg: ToBackground, _sender, send: (r: BackgroundResponse) => void) => {
   void (async () => {
     switch (msg.action) {
       case "START": {
-        const started = await startRun();
-        send({ ok: true, started });
+        await startRun();
+        send({ ok: true, started: state.running });
         break;
       }
       case "STOP": {
@@ -147,78 +389,10 @@ chrome.runtime.onMessage.addListener((msg: ToBackground, _sender, send: (r: Back
       }
     }
   })();
-  return true;
 });
 
-async function handleExtractResult(data: ExtractionData): Promise<void> {
-  const exists = await leadExists(data.pageUrl);
-  if (!exists) await saveLead(data);
-  if (!state.processed.includes(data.pageUrl)) state.processed.push(data.pageUrl);
-  state.pagesToday += 1;
-  state.pagesThisRun += 1;
-  state.lastAction = "saved " + data.pageUrl;
-  persist();
-}
-
-function handleCollectedLinks(links: string[]): void {
-  const fresh = links.filter((l) => !state.processed.includes(l) && !state.queue.includes(l));
-  state.queue.push(...fresh);
-  state.lastAction = `queued ${fresh.length} links`;
-  persist();
-}
-
-async function startRun(): Promise<boolean> {
-  if (state.running) return false;
-  const settings = await getSettings();
-  const keywords = settings.keywords.map((k) => k.trim()).filter(Boolean);
-  if (keywords.length === 0) {
-    notify("Add at least one keyword in Settings before starting.");
-    return false;
-  }
-  state = {
-    ...DEFAULT_STATE,
-    processed: [],
-    running: true,
-    phase: "warmup",
-    dayKey: todayKey(),
-    pagesToday: 0,
-    keywords,
-    locations: settings.locations.map((l) => l.trim()).filter(Boolean),
-    currentCap: Math.min(settings.maxPagesPerRun, settings.antiDetection.pagesPerDay),
-    startedAt: Date.now(),
-    runId: "run-" + Date.now(),
-  };
-  persist();
-  badge("ON");
-  title("FB Scraper: warming up");
-  void ensureControlledTab();
-  void createAlarm();
-  return true;
-}
-
-async function createAlarm(): Promise<void> {
-  await chrome.alarms.clear("scraper-pump");
-  await chrome.alarms.create("scraper-pump", { periodInMinutes: 0.2 });
-}
-
-function stopRun(): void {
-  state.running = false;
-  state.phase = "stopped";
-  persist();
-  badge("");
-  title("FB Scraper");
-  void chrome.alarms.clear("scraper-pump");
-}
-
-async function getSettings(): Promise<RunSettings> {
-  const res = await chrome.storage.local.get([SETTINGS_KEY]);
-  if (!res[SETTINGS_KEY]) return DEFAULT_SETTINGS;
-  const s = res[SETTINGS_KEY] as RunSettings;
-  return { ...DEFAULT_SETTINGS, ...s, antiDetection: { ...DEFAULT_SETTINGS.antiDetection, ...s.antiDetection } };
-}
-
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "scraper-pump" || alarm.name === "scraper-alive") void pump();
+  if (alarm.name === "scraper-pump") void pump();
 });
 
 async function pump(): Promise<void> {
@@ -227,216 +401,156 @@ async function pump(): Promise<void> {
     void chrome.alarms.clear("scraper-alive");
     return;
   }
+  if (pumping) return;
+  pumping = true;
   try {
+    if (state.nextAt && state.nextAt > Date.now()) {
+      setAction("pacing " + Math.round((state.nextAt - Date.now()) / 1000) + "s");
+      state.phase = "waiting";
+      await paceUntil(state.nextAt - Date.now());
+    }
     await oneStep();
   } catch (e) {
     state.errors.push(String(e));
     state.errors = state.errors.slice(-20);
     persist();
+  } finally {
+    pumping = false;
   }
-  await chrome.alarms.create("scraper-alive", { when: Date.now() + randInt(20000, 45000) });
+  scheduleNext();
+}
+
+function scheduleNext(): void {
+  if (!state.running) return;
+  const base = Date.now();
+  const target = Math.max(base + 2000, state.nextAt && state.nextAt > base ? state.nextAt : base + randInt(15000, 30000));
+  void chrome.alarms.create("scraper-pump", { when: target });
+  void chrome.alarms.create("scraper-alive", { when: Date.now() + randInt(20000, 45000) });
 }
 
 async function oneStep(): Promise<void> {
   if (state.cooldownUntil > Date.now()) {
     state.phase = "cooldown";
+    state.lastAction = "cooldown until " + new Date(state.cooldownUntil).toLocaleString();
     persist();
     return;
   }
+
   const settings = await getSettings();
-  const ad = settings.antiDetection;
-  if (!nowInActiveWindow(ad.activeHours)) {
+  if (settings.respectActiveHours && !nowInActiveWindow(settings.antiDetection.activeHours)) {
     state.phase = "paused";
+    state.lastAction = "outside active hours";
     persist();
+    await chrome.alarms.create("scraper-pump", { when: Date.now() + 60000 });
     return;
   }
+
   if (state.pagesToday >= state.currentCap) {
-    state.phase = "done";
-    finishRun();
+    setAction("daily cap reached");
+    await finishRun();
     void exportCsv();
-    notify(`Daily cap reached (${state.pagesToday}). CSV exported.`);
+    notify("Daily cap reached. CSV exported.");
+    return;
+  }
+
+  if (state.phase === "preparing") {
+    const t = await controlledTab();
+    const warm = Math.max(8, Math.round(settings.antiDetection.warmupMin * 60));
+    void sendToTab(t, { action: "WARM", seconds: warm, requestId: reqId() });
+    state.phase = "warmup";
+    state.nextAt = Date.now() + warm * 1000 + randInt(2000, 8000);
+    setAction("warming up " + warm + "s before first search");
+    persist();
     return;
   }
 
   if (state.phase === "warmup") {
-    state.lastAction = "warming up session";
-    const t = await controlledTab();
-    await sendToTab(t, { action: "WARM", seconds: Math.max(8, Math.round(ad.warmupMin * 60)), requestId: reqId() });
     state.phase = "searching";
+    state.stage = "search";
     persist();
     return;
   }
 
-  if (state.queue.length === 0) {
-    await nextSearch();
+  if (state.stage === "search") {
+    await beginSearch();
     return;
   }
 
-  await visitNextPage();
+  if (state.stage === "visit" || state.stage === "extract") {
+    await runVisit();
+    return;
+  }
+
+  if (state.stage === "done") {
+    await finishRun();
+    void exportCsv();
+    notify("Run finished. CSV exported.");
+  }
 }
 
-async function nextSearch(): Promise<void> {
-  const settings = await getSettings();
+async function beginSearch(): Promise<void> {
+  state.stage = "collect";
   if (state.keywordIdx >= state.keywords.length) {
-    state.phase = "done";
-    finishRun();
-    void exportCsv();
-    notify("All keywords processed. CSV exported.");
+    state.stage = "done";
+    setPhase("done");
     return;
   }
+  const settings = await getSettings();
   const kw = state.keywords[state.keywordIdx];
   const loc = state.locations.length ? state.locations[0] : "";
   const q = loc ? `${kw} ${loc}` : kw;
-  state.lastAction = "search: " + q;
-  state.phase = "searching";
-  persist();
-
-  await holdDelay(settings.antiDetection.searchDelayMin, settings.antiDetection.searchDelayMax);
+  setAction("searching: " + q);
+  setPhase("searching");
+  state.nextAt = 0;
 
   const t = await controlledTab();
   const url = "https://www.facebook.com/search/pages?q=" + encodeURIComponent(q);
   await navigateTab(t, url);
-  await sleep(randInt(2500, 6000));
-  const resp = await sendToTab(t, { action: "COLLECT_LINKS", requestId: reqId() });
-  const links: string[] = resp && isLinks(resp) ? resp.links : [];
+  await sleep(randInt(1500, 4000));
+  const resp = await chrome.tabs.sendMessage(t, { action: "COLLECT_LINKS", requestId: reqId() }).catch(() => undefined);
+  const links: string[] = isLinks(resp) ? resp.links : [];
   state.keywordIdx += 1;
+  state.nextAt = Date.now() + (settings.antiDetection.searchDelayMin + Math.random() * (settings.antiDetection.searchDelayMax - settings.antiDetection.searchDelayMin)) * 1000;
   if (links.length) {
     handleCollectedLinks(links);
+    setPhase("extracting");
+    state.stage = "visit";
   } else {
-    state.errors.push(`no links for "${kw}"`);
-    state.errors = state.errors.slice(-20);
+    setAction("no results for " + kw);
+    state.stage = "search";
     persist();
   }
 }
 
-async function visitNextPage(): Promise<void> {
+async function runVisit(): Promise<void> {
+  if (state.queue.length === 0) {
+    state.stage = "search";
+    setPhase("searching");
+    persist();
+    return;
+  }
   const settings = await getSettings();
   const url = state.queue.shift()!;
-  await holdDelay(settings.antiDetection.pageDelayMin, settings.antiDetection.pageDelayMax);
+  setAction("visiting " + url);
   const t = await controlledTab();
   await navigateTab(t, url);
-  await sleep(randInt(1500, 4000));
-  const sev = await sendDetect(t);
+  await sleep(randInt(2500, 6000));
+  const sev = await detectStep(t);
   if (sev > 0) {
     enterCooldown(sev);
     return;
   }
-  const resp = await sendToTab(t, { action: "EXTRACT", requestId: reqId() });
-  if (!resp || !isData(resp)) {
+  const data = await extractStep(t);
+  if (!data) {
     state.errors.push("extract failed: " + url);
     state.errors = state.errors.slice(-20);
     persist();
     return;
   }
-  await handleExtractResult(resp.data);
-}
-
-async function sendDetect(tabId: number): Promise<Severity> {
-  const resp = await sendToTab(tabId, { action: "DETECT", requestId: reqId() });
-  return resp && isSeverity(resp) ? resp.severity : 0;
-}
-
-function isLinks(r: ContentResponse): r is ContentOkLinks {
-  return r.ok === true && "links" in r;
-}
-function isData(r: ContentResponse): r is ContentOkData {
-  return r.ok === true && "data" in r;
-}
-function isSeverity(r: ContentResponse): r is ContentOkSeverity {
-  return r.ok === true && "severity" in r;
-}
-
-async function holdDelay(minS: number, maxS: number): Promise<void> {
-  const base = (minS + Math.random() * (maxS - minS)) * 1000;
-  const ms = Math.round(base * jitter(0.1));
-  state.lastAction = "pacing " + Math.round(ms / 1000) + "s";
-  state.nextAt = Date.now() + ms;
+  await handleExtractResult(data);
+  state.stage = "visit";
+  state.nextAt = Date.now() + (settings.antiDetection.pageDelayMin + Math.random() * (settings.antiDetection.pageDelayMax - settings.antiDetection.pageDelayMin)) * 1000;
   persist();
-  await sleep(ms);
-  state.nextAt = 0;
-}
-
-function enterCooldown(sev: Severity): void {
-  void getSettings().then((cfg) => {
-    const ad = cfg.antiDetection;
-    const hours = sev >= 3 ? ad.cooldownSevereH : sev === 2 ? ad.cooldownModerateH : ad.cooldownMildH;
-    state.cooldownUntil = Date.now() + hours * 3600000;
-    state.cooldownSeverity = sev;
-    if (sev >= 2) state.currentCap = Math.max(10, Math.round(state.currentCap * 0.5));
-    state.phase = "cooldown";
-    persist();
-    badge("STOP");
-    title("FB Scraper: cooldown " + ["", "mild", "moderate", "severe"][sev]);
-  });
-}
-
-function finishRun(): void {
-  state.running = false;
-  if (state.runId) {
-    void recordRun({ runId: state.runId, startedAt: new Date(state.startedAt).toISOString(), finishedAt: new Date().toISOString(), pages: state.pagesThisRun, errors: state.errors.length });
-  }
-  badge("DONE");
-}
-
-async function exportCsv(): Promise<number> {
-  const leads = await getAllLeads();
-  const csv = toCsv(leads);
-  const blobUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const filename = "fb-leads-" + todayKey() + (state.runId ? "-" + state.runId.replace("run-", "") : "") + ".csv";
-  try {
-    await chrome.downloads.download({ url: blobUrl, filename, saveAs: true });
-  } catch {
-    void chrome.downloads.download({ url: blobUrl, filename });
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-  }
-  return leads.length;
-}
-
-async function ensureControlledTab(): Promise<number> {
-  return controlledTab();
-}
-
-async function controlledTab(): Promise<number> {
-  if (controlledTabId) {
-    try {
-      await chrome.tabs.get(controlledTabId);
-      return controlledTabId;
-    } catch {
-      controlledTabId = undefined;
-    }
-  }
-  const tab = await chrome.tabs.create({ url: "https://www.facebook.com/", active: false });
-  if (!tab.id) throw new Error("tab has no id");
-  controlledTabId = tab.id;
-  return controlledTabId;
-}
-
-async function navigateTab(tabId: number, url: string): Promise<void> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      await chrome.tabs.update(tabId, { url });
-      return;
-    } catch {
-      await sleep(1500);
-    }
-  }
-  state.errors.push("nav failed: " + url);
-  state.errors = state.errors.slice(-20);
-  persist();
-}
-
-async function sendToTab(tabId: number, msg: ToContent): Promise<ContentResponse | undefined> {
-  try {
-    return await chrome.tabs.sendMessage(tabId, msg);
-  } catch {
-    await sleep(1200);
-    try {
-      return await chrome.tabs.sendMessage(tabId, msg);
-    } catch {
-      return undefined;
-    }
-  }
 }
 
 void hydrate();

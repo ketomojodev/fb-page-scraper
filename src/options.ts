@@ -30,6 +30,7 @@ function loadIntoForm(s: RunSettings): void {
   ($("#keywords") as HTMLTextAreaElement).value = s.keywords.join("\n");
   ($("#locations") as HTMLInputElement).value = s.locations.join(", ");
   ($("#maxPagesPerRun") as HTMLInputElement).value = String(s.maxPagesPerRun);
+  ($("#respectHours") as HTMLInputElement).checked = s.respectActiveHours ?? true;
   ($("#pagesPerDay") as HTMLInputElement).value = String(ad.pagesPerDay);
   ($("#pageDelayMin") as HTMLInputElement).value = String(ad.pageDelayMin);
   ($("#pageDelayMax") as HTMLInputElement).value = String(ad.pageDelayMax);
@@ -69,6 +70,7 @@ function readFromForm(): RunSettings {
     locations,
     enabled: true,
     maxPagesPerRun: numValue("maxPagesPerRun"),
+    respectActiveHours: ($("#respectHours") as HTMLInputElement).checked,
     licenseKey: ($("#licenseKey") as HTMLInputElement).value.trim(),
     antiDetection: {
       pageDelayMin,

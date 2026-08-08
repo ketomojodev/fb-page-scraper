@@ -19,6 +19,7 @@ export interface RunSettings {
   locations: string[];
   enabled: boolean;
   maxPagesPerRun: number;
+  respectActiveHours: boolean;
   antiDetection: AntiDetectionSettings;
   licenseKey: string;
 }
@@ -32,8 +33,7 @@ export const DEFAULT_ANTI_DETECTION: AntiDetectionSettings = {
   pagesPerHour: 10,
   warmupMin: 6,
   activeHours: [
-    [9.5, 11],
-    [14.5, 16],
+    [0, 24],
   ],
   cooldownMildH: 12,
   cooldownModerateH: 48,
@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS: RunSettings = {
   locations: [],
   enabled: true,
   maxPagesPerRun: 125,
+  respectActiveHours: false,
   antiDetection: DEFAULT_ANTI_DETECTION,
   licenseKey: "",
 };

@@ -23,6 +23,7 @@ export type RunPhase =
   | "warmup"
   | "searching"
   | "extracting"
+  | "waiting"
   | "cooldown"
   | "paused"
   | "done"
