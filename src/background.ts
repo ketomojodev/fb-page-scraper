@@ -478,6 +478,8 @@ async function oneStep(): Promise<void> {
   if (state.phase === "warmup") {
     state.phase = "searching";
     state.stage = "search";
+    state.nextAt = Date.now() + randInt(3000, 9000);
+    setAction("warm-up complete - starting first search");
     persist();
     return;
   }

@@ -50,18 +50,31 @@ function render(status: BotStatus): void {
   updateCountdown();
 }
 
+const COUNTING_PHASES = new Set(["warmup", "waiting", "searching", "extracting", "paused"]);
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  if (total < 60) return total + "s";
+  const m = Math.floor(total / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 function updateCountdown(): void {
   const label = $<HTMLSpanElement>("[data-countdown-label]");
   const timer = $<HTMLSpanElement>("[data-countdown]");
   const s = lastStatus;
   if (!s) return;
   const pending = s.nextAt && s.nextAt > Date.now();
-  const counting = pending && (s.phase === "warmup" || s.phase === "waiting");
-  if (counting && s.nextAt) {
+  if (s.running) {
     label.textContent = PHASE_LABELS[s.phase] ?? s.phase;
-    const secs = Math.max(0, Math.ceil((s.nextAt - Date.now()) / 1000));
-    timer.textContent = secs + "s";
-    timer.hidden = false;
+    if (pending && COUNTING_PHASES.has(s.phase) && s.nextAt) {
+      timer.textContent = formatCountdown(s.nextAt - Date.now());
+      timer.hidden = false;
+    } else {
+      timer.textContent = "";
+      timer.hidden = true;
+    }
   } else {
     label.textContent = "";
     timer.textContent = "";
