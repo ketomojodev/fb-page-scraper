@@ -344,6 +344,7 @@ async function ensurePumpAlarm(): Promise<void> {
 
 chrome.runtime.onMessage.addListener((msg: ToBackground, _sender, send: (r: BackgroundResponse) => void) => {
   void (async () => {
+    await hydration;
     switch (msg.action) {
       case "START": {
         await startRun();
@@ -389,6 +390,7 @@ chrome.runtime.onMessage.addListener((msg: ToBackground, _sender, send: (r: Back
       }
     }
   })();
+  return true;
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -396,6 +398,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 async function pump(): Promise<void> {
+  await hydration;
   if (!state.running) {
     void chrome.alarms.clear("scraper-pump");
     void chrome.alarms.clear("scraper-alive");
@@ -403,6 +406,10 @@ async function pump(): Promise<void> {
   }
   if (pumping) return;
   pumping = true;
+  if (!state.running) {
+    pumping = false;
+    return;
+  }
   try {
     if (state.nextAt && state.nextAt > Date.now()) {
       setAction("pacing " + Math.round((state.nextAt - Date.now()) / 1000) + "s");
@@ -429,6 +436,10 @@ function scheduleNext(): void {
 }
 
 async function oneStep(): Promise<void> {
+  if (!state.running) {
+    stopRun();
+    return;
+  }
   if (state.cooldownUntil > Date.now()) {
     state.phase = "cooldown";
     state.lastAction = "cooldown until " + new Date(state.cooldownUntil).toLocaleString();
@@ -553,5 +564,5 @@ async function runVisit(): Promise<void> {
   persist();
 }
 
-void hydrate();
+const hydration = hydrate();
 void chrome.alarms.create("scraper-alive", { when: Date.now() + 60000 });

@@ -7,18 +7,32 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
     <style>
       :root {
-        --primary: #0d9488;
-        --primary-dark: #0f766e;
+        color-scheme: light;
+        --primary: #0f766e;
+        --primary-strong: #115e59;
         --primary-soft: #ccfbf1;
+        --primary-on-soft: #134e4a;
         --bg: #f8fafc;
         --surface: #ffffff;
         --border: #e2e8f0;
+        --border-strong: #cbd5e1;
         --text: #0f172a;
-        --muted: #64748b;
+        --muted: #475569;
         --accent: #ea580c;
-        --danger: #dc2626;
-        --radius: 12px;
-        --gap: 8px;
+        --accent-soft: #ffedd5;
+        --danger: #b91c1c;
+        --danger-soft: #fee2e2;
+        --danger-border: #fecaca;
+        --success: #15803d;
+        --success-soft: #dcfce7;
+        --warning-text: #92400e;
+        --warning-soft: #fef3c7;
+        --idle-soft: #e2e8f0;
+        --idle-ink: #334155;
+        --radius-lg: 14px;
+        --radius-sm: 9px;
+        --focus-ring: rgba(15, 118, 110, 0.35);
+        --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.05);
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -40,22 +54,24 @@
       .logo {
         width: 34px; height: 34px;
         border-radius: 10px;
-        background: var(--primary);
+        background: linear-gradient(135deg, var(--primary), var(--primary-strong));
         display: grid; place-items: center;
-        color: #fff; font-weight: 700; font-size: 16px;
+        color: #fff;
         flex-shrink: 0;
       }
-      h1 { font-size: 15px; font-weight: 700; }
+      .logo svg { width: 19px; height: 19px; }
+      h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
       .subtitle { font-size: 12px; color: var(--muted); }
       main { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
       .status-card {
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: var(--radius);
+        border-radius: var(--radius-lg);
         padding: 12px 14px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
+        box-shadow: var(--shadow-card);
       }
       .status-row {
         display: flex;
@@ -68,60 +84,104 @@
         padding: 3px 10px;
         border-radius: 999px;
         background: var(--primary-soft);
-        color: var(--primary-dark);
+        color: var(--primary-on-soft);
         text-transform: capitalize;
+        letter-spacing: 0.01em;
       }
-      .pill.idle { background: #e2e8f0; color: #475569; }
-      .pill.cooldown, .pill.stopped { background: #fee2e2; color: #b91c1c; }
-      .pill.done { background: #dcfce7; color: #166534; }
-      .metric { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
-      .metric b { color: var(--text); font-weight: 600; }
+      .pill.active, .pill.running { background: var(--primary-soft); color: var(--primary-on-soft); }
+      .pill.waiting { background: var(--warning-soft); color: var(--warning-ink, #92400e); }
+      .pill.idle { background: var(--idle-soft); color: var(--idle-ink); }
+      .pill.cooldown, .pill.stopped { background: var(--danger-soft); color: var(--danger); }
+      .pill.done { background: var(--success-soft); color: var(--success); }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding-top: 2px;
+      }
+      .stat {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        text-align: center;
+      }
+      .stat b {
+        display: block;
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+      .stat-label {
+        display: block;
+        font-size: 11.5px;
+        color: var(--muted);
+        font-weight: 500;
+        margin-top: 1px;
+      }
       .last-action {
         font-size: 12px; color: var(--muted);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        min-height: 18px;
       }
-      .actions { display: flex; gap: var(--gap); }
+      .actions { display: flex; gap: 8px; }
       button {
         flex: 1;
         font-family: inherit;
         font-size: 14px;
         font-weight: 600;
         padding: 10px 14px;
+        min-height: 40px;
         border: 1px solid transparent;
         border-radius: 10px;
         cursor: pointer;
         transition: background 150ms ease, transform 80ms ease, box-shadow 150ms ease;
       }
       button:active { transform: scale(0.98); }
-      button:focus-visible { outline: 3px solid rgba(13, 148, 136, 0.35); outline-offset: 2px; }
+      button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
       .primary { background: var(--primary); color: #fff; }
-      .primary:hover { background: var(--primary-dark); box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3); }
-      .ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
+      .primary:hover { background: var(--primary-strong); box-shadow: 0 2px 10px rgba(15, 118, 110, 0.35); }
+      .ghost { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
       .ghost:hover { background: #f1f5f9; }
-      .danger { background: var(--surface); color: var(--danger); border-color: #fecaca; }
+      .danger { background: var(--surface); color: var(--danger); border-color: var(--danger-border); }
       .danger:hover { background: #fef2f2; }
-      .secondary-row { display: flex; gap: var(--gap); }
+      .secondary-row { display: flex; gap: 8px; }
       .link-btn {
         flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
         text-align: center;
         font-size: 13px;
         font-weight: 500;
-        color: var(--primary-dark);
+        color: var(--primary);
         background: var(--surface);
         border: 1px solid var(--border);
         padding: 8px 10px;
+        min-height: 38px;
         border-radius: 10px;
         cursor: pointer;
         text-decoration: none;
-        transition: background 150ms ease;
+        transition: background 150ms ease, border-color 150ms ease;
       }
-      .link-btn:hover { background: #f0fdfa; }
+      .link-btn:hover { background: var(--primary-soft); border-color: transparent; }
+      .link-btn:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+      .link-btn svg { width: 15px; height: 15px; }
       .toast-wrap { position: relative; }
       [data-toast] {
         position: absolute;
         left: 16px; right: 16px; bottom: 14px;
         background: var(--text);
-        color: #fff;
+        color: #f8fafc;
         font-size: 12.5px;
         padding: 10px 14px;
         border-radius: 10px;
@@ -132,11 +192,58 @@
         z-index: 10;
       }
       [data-toast].show { opacity: 1; transform: translateY(0); }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --primary: #2dd4bf;
+          --primary-strong: #0d9488;
+          --primary-soft: #0f2f2c;
+          --primary-on-soft: #5eead4;
+          --bg: #0b1220;
+          --surface: #111a2e;
+          --border: #22304c;
+          --border-strong: #334155;
+          --text: #e6edf7;
+          --muted: #94a3b8;
+          --risk: #fb923c;
+          --accent-soft: #3a2a16;
+          --danger: #f87171;
+          --danger-soft: #3a1a1f;
+          --danger-border: #5f2a2e;
+          --success: #4ade80;
+          --success-soft: #14351f;
+          --warning-text: #fbbf24;
+          --warning-soft: #3a2c12;
+          --idle-soft: #1f2b3f;
+          --idle-ink: #cbd5e1;
+          --focus-ring: rgba(45, 212, 191, 0.45);
+          --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        .primary { color: #10221f; }
+        .primary:hover { box-shadow: 0 2px 10px rgba(45, 212, 191, 0.3); }
+        .ghost:hover { background: #1a2640; }
+        .danger:hover { background: #24141a; }
+        .stat { background: #0d1626; }
+        [data-toast] { background: #e6edf7; color: #0b1220; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
     <header>
-      <div class="logo">F</div>
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2Z" />
+          <path d="M12 22V2" />
+          <path d="M3 6.5l9 4.5 9-4.5" />
+        </svg>
+      </div>
       <div>
         <h1>FB Page Scraper</h1>
         <div class="subtitle">Business lead collector</div>
@@ -146,10 +253,21 @@
       <section class="status-card" aria-label="Scraper status">
         <div class="status-row">
           <span class="pill" data-status>idle</span>
-          <span class="metric" style="gap:4px;">today <b data-today>0</b></span>
-          <span class="metric" style="gap:4px;">run <b data-run>0</b></span>
         </div>
-        <div class="metric"><span>Queue</span><b data-queue>0</b></div>
+        <div class="metrics">
+          <div class="stat">
+            <b data-today>0</b>
+            <span class="stat-label">Today</span>
+          </div>
+          <div class="stat">
+            <b data-run>0</b>
+            <span class="stat-label">This run</span>
+          </div>
+          <div class="stat">
+            <b data-queue>0</b>
+            <span class="stat-label">In queue</span>
+          </div>
+        </div>
         <div class="last-action" data-last>No run yet</div>
       </section>
       <section class="actions" aria-label="Controls">
@@ -160,7 +278,13 @@
         <button class="ghost" data-export>Export CSV</button>
       </section>
       <section class="secondary-row">
-        <a class="link-btn" href="#" id="open-settings">Settings</a>
+        <a class="link-btn" href="#" id="open-settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Settings
+        </a>
       </section>
     </main>
     <div data-toast role="status" aria-live="polite"></div>
