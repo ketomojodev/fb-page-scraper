@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FB Page Scraper — Settings</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <style>
+      :root {
+        --primary: #0d9488;
+        --primary-dark: #0f766e;
+        --primary-soft: #ccfbf1;
+        --accent: #ea580c;
+        --accent-soft: #ffedd5;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --danger: #dc2626;
+        --danger-soft: #fee2e2;
+        --success: #16a34a;
+        --success-soft: #dcfce7;
+        --radius: 12px;
+        --radius-sm: 8px;
+        --sp-1: 8px;
+        --sp-2: 16px;
+        --sp-3: 24px;
+        --sp-4: 32px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 15px;
+        line-height: 1.6;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: var(--sp-4) var(--sp-3) 96px;
+      }
+      header.top {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: var(--sp-4);
+      }
+      .logo {
+        width: 42px; height: 42px;
+        border-radius: 12px;
+        background: var(--primary);
+        display: grid; place-items: center;
+        color: #fff; font-weight: 700; font-size: 20px;
+      }
+      h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+      .lede { color: var(--muted); font-size: 14px; margin-top: 2px; }
+      section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: var(--sp-3);
+        margin-bottom: var(--sp-3);
+      }
+      h2 {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: var(--sp-1);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-desc { color: var(--muted); font-size: 13px; margin-bottom: var(--sp-3); }
+      .field { margin-bottom: var(--sp-3); }
+      .field label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .helper { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+      .error-msg {
+        color: var(--danger);
+        font-size: 12.5px;
+        margin-top: 6px;
+        min-height: 0;
+      }
+      input[type="text"],
+      textarea,
+      select,
+      input[type="number"] {
+        width: 100%;
+        font-family: inherit;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18);
+      }
+      textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
+      .invalid { border-color: var(--danger) !important; }
+      .invalid:focus { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+      .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+      @media (max-width: 560px) { .grid, .grid-3 { grid-template-columns: 1fr; } }
+      .range-display { font-weight: 600; color: var(--primary-dark); }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+      }
+      .toggle-row .label { font-size: 14px; font-weight: 500; }
+      .switch { position: relative; width: 44px; height: 26px; }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .slider {
+        position: absolute; cursor: pointer; inset: 0;
+        background: #cbd5e1;
+        border-radius: 999px;
+        transition: background 150ms ease;
+      }
+      .slider:before {
+        content: ""; position: absolute; height: 20px; width: 20px;
+        left: 3px; top: 3px; background: #fff;
+        border-radius: 50%;
+        transition: transform 150ms ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
+      .switch input:checked + .slider { background: var(--primary); }
+      .switch input:checked + .slider:before { transform: translateX(18px); }
+      .switch input:focus-visible + .slider { outline: 3px solid rgba(13,148,136,.35); outline-offset: 2px; }
+      details {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        margin-top: var(--sp-2);
+      }
+      summary {
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 14px;
+        color: var(--primary-dark);
+        list-style: none;
+        user-select: none;
+      }
+      summary::-webkit-details-marker { display: none; }
+      summary:focus-visible { outline: 3px solid rgba(13,148,136,.35); outline-offset: 2px; border-radius: 8px; }
+      details[open] summary { border-bottom: 1px solid var(--border); }
+      details .body { padding: var(--sp-2); }
+      .status-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        margin-bottom: var(--sp-3);
+      }
+      .status-line.success { background: var(--success-soft); color: #14532d; }
+      .status-line.warn { background: #fef3c7; color: #92400e; }
+      .status-line.error { background: var(--danger-soft); color: #991b1b; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+      .footer-bar {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        background: rgba(248, 250, 252, 0.92);
+        backdrop-filter: blur(8px);
+        border-top: 1px solid var(--border);
+        padding: 14px var(--sp-3);
+        display: flex;
+        justify-content: center;
+        gap: var(--sp-2);
+        z-index: 20;
+      }
+      .footer-bar > div { max-width: 656px; width: 100%; display: flex; gap: var(--sp-2); }
+      button {
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 11px 22px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: background 150ms ease, transform 80ms ease, box-shadow 150ms ease, opacity 150ms ease;
+      }
+      button:active { transform: scale(0.98); }
+      button:focus-visible { outline: 3px solid rgba(13,148,136,.35); outline-offset: 2px; }
+      .primary { background: var(--primary); color: #fff; }
+      .primary:hover { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(13,148,136,.25); }
+      .primary:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+      .ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
+      .ghost:hover { background: #f1f5f9; }
+      .danger { background: var(--surface); color: var(--danger); border-color: #fecaca; }
+      .danger:hover { background: #fef2f2; }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--sp-2); }
+      .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--primary-soft);
+        color: var(--primary-dark);
+        border-radius: 999px;
+        padding: 4px 8px 4px 12px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .chip button {
+        background: none; border: none; cursor: pointer;
+        color: var(--primary-dark); font-weight: 700; font-size: 14px;
+        padding: 0 4px; line-height: 1;
+      }
+      .chip button:hover { color: var(--danger); }
+      .chip button:focus-visible { outline: 2px solid var(--primary); border-radius: 4px; }
+      .legend { font-size: 12px; color: var(--muted); }
+      kbd {
+        background: #eef2f7; border: 1px solid var(--border);
+        border-radius: 5px; padding: 1px 6px; font-size: 12px;
+        font-family: ui-monospace, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="logo">F</div>
+      <div>
+        <h1>FB Page Scraper</h1>
+        <div class="lede">Find business pages by keyword + location and export public contacts as CSV.</div>
+      </div>
+    </header>
+
+    <div class="status-line" data-statusline hidden>
+      <span class="dot"></span><span data-statusmsg></span>
+    </div>
+
+    <form id="form" novalidate>
+      <section>
+        <h2>Targets</h2>
+        <p class="section-desc">The bot searches Facebook and visits matching business pages.</p>
+        <div class="field">
+          <label for="keywords">Keywords <span aria-hidden="true" style="color:var(--danger)">*</span></label>
+          <textarea id="keywords" name="keywords" required rows="4" aria-describedby="kw-help"></textarea>
+          <div class="helper" id="kw-help">One keyword or niche per line, e.g. <kbd>HVAC contractor</kbd>, <kbd>roofing company</kbd>. Used to find pages.</div>
+          <div class="error-msg" data-error="keywords" role="alert"></div>
+        </div>
+        <div class="field">
+          <label for="locations">Locations</label>
+          <input type="text" id="locations" name="locations" aria-describedby="loc-help" />
+          <div class="helper" id="loc-help">Comma-separated, e.g. <kbd>Chicago, IL</kbd> or <kbd>New York</kbd>. Appended to every keyword search.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Run limits</h2>
+        <p class="section-desc">Daily caps keep the run inside the safe anti-detection envelope.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="maxPagesPerRun">Pages this run</label>
+            <input type="number" id="maxPagesPerRun" name="maxPagesPerRun" min="1" max="1000" />
+            <div class="helper">Ceiling for the current run.</div>
+          </div>
+          <div class="field">
+            <label for="pagesPerDay">Daily cap (pages/day)</label>
+            <input type="number" id="pagesPerDay" name="pagesPerDay" min="1" max="500" />
+            <div class="helper">Hard stop once reached. Recommended <span class="range-display">125</span>.</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Extraction fields</h2>
+        <p class="section-desc">Exported columns. Fields that are public on the page are captured; emails and phones only if the business publishes them.</p>
+        <div class="legend">page_url · page_name · category · phone · email · website · city · country · address · scraped_at</div>
+      </section>
+
+      <section>
+        <h2>Anti-detection</h2>
+        <p class="section-desc">Humanized pacing keeps the run inside normal usage patterns. Changing these defaults trades throughput for safety — the recommended values already balance both.</p>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Respect active hours</div>
+            <div class="helper">Only run inside the windows below, in your timezone.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="respectHours" name="respectHours" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="pageDelayMin">Delay between pages (min, s)</label>
+            <input type="number" id="pageDelayMin" name="pageDelayMin" min="5" max="300" />
+          </div>
+          <div class="field">
+            <label for="pageDelayMax">Delay between pages (max, s)</label>
+            <input type="number" id="pageDelayMax" name="pageDelayMax" min="5" max="300" />
+          </div>
+          <div class="field">
+            <label for="searchDelayMin">Delay between searches (min, s)</label>
+            <input type="number" id="searchDelayMin" name="searchDelayMin" min="10" max="600" />
+          </div>
+          <div class="field">
+            <label for="searchDelayMax">Delay between searches (max, s)</label>
+            <input type="number" id="searchDelayMax" name="searchDelayMax" min="10" max="600" />
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="warmupMin">Warm-up (min)</label>
+            <input type="number" id="warmupMin" name="warmupMin" min="1" max="30" />
+            <div class="helper">Organic surfing before the first bot action.</div>
+          </div>
+          <div class="field">
+            <label for="pagesPerHour">Pages / hour cap</label>
+            <input type="number" id="pagesPerHour" name="pagesPerHour" min="1" max="60" />
+            <div class="helper">Avoids bursts that look automated.</div>
+          </div>
+        </div>
+
+        <details>
+          <summary>Active hours &amp; cooldowns</summary>
+          <div class="body">
+            <div class="field">
+              <label for="activeHours">Active hours (24h, comma-separated ranges)</label>
+              <input type="text" id="activeHours" name="activeHours" aria-describedby="ah-help" />
+              <div class="helper" id="ah-help">e.g. <kbd>9.5-11, 14.5-16</kbd>. Two short sessions look more human than one long run.</div>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label for="cooldownMildH">Mild cooldown (h)</label>
+                <input type="number" id="cooldownMildH" name="cooldownMildH" min="1" max="168" />
+              </div>
+              <div class="field">
+                <label for="cooldownModerateH">Moderate cooldown (h)</label>
+                <input type="number" id="cooldownModerateH" name="cooldownModerateH" min="1" max="168" />
+              </div>
+              <div class="field">
+                <label for="cooldownSevereH">Severe cooldown (h)</label>
+                <input type="number" id="cooldownSevereH" name="cooldownSevereH" min="1" max="336" />
+              </div>
+            </div>
+            <div class="helper">Mild = single captcha. Moderate = repeated signals (also halves the daily cap). Severe = checkpoint / 2FA / forced logout (keeps session untouched).</div>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2>License</h2>
+        <div class="field">
+          <label for="licenseKey">License key</label>
+          <input type="text" id="licenseKey" name="licenseKey" autocomplete="off" placeholder="Not required for this build" aria-describedby="lic-help" />
+          <div class="helper" id="lic-help">Reserved for future monetization. Leave blank for the working MVP.</div>
+        </div>
+      </section>
+    </form>
+
+    <div class="footer-bar">
+      <div>
+        <button class="primary" type="submit" data-save>Save settings</button>
+        <button class="ghost" type="button" data-reset>Reset</button>
+      </div>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

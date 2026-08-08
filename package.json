@@ -1,0 +1,20 @@
+{
+  "name": "fb-page-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Facebook business page lead scraper Chrome extension (Manifest V3)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.263",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.0"
+  },
+  "allowScripts": {
+    "esbuild@0.23.1": true
+  }
+}
